@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Çipil Debug Level XL</title>
+<style>
+  :root{
+    --gold: #d4af37;
+    --gold-bright: #f4d35e;
+    --gold-dim: #8a6d1f;
+    --black: #060606;
+    --black2: #171717;
+    --red: #cc4d4d;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color: transparent; user-select:none;}
+  html,body{
+    margin:0; padding:0; width:100%; height:100%;
+    background:var(--black);
+    font-family:-apple-system, Roboto, "Segoe UI", sans-serif;
+    overflow:hidden;
+  }
+  #app{
+    position:relative; width:100vw; height:100vh;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+  }
+
+  /* Brand */
+  .brand{
+    position:absolute; top:18px; right:16px;
+    display:flex; align-items:center; gap:8px;
+  }
+  .brand .logo{
+    width:34px; height:34px; border-radius:50%;
+    background:var(--gold-bright);
+    display:flex; align-items:center; justify-content:center;
+    font-weight:800; color:var(--black); font-size:16px;
+    border:1.4px solid var(--black);
+  }
+  .brand .text{ text-align:right; line-height:1.1; }
+  .brand .text .t1{ font-weight:800; color:var(--gold-bright); font-size:12px; letter-spacing:0.5px;}
+  .brand .text .t2{ color:var(--gold-dim); font-size:9px; letter-spacing:1px;}
+
+  /* Pro badge */
+  .pro-badge{
+    position:absolute; top:70px; left:50%; transform:translateX(-50%);
+    background:var(--gold-bright); color:var(--black);
+    font-weight:800; font-size:11px; letter-spacing:0.5px;
+    padding:10px 22px; border-radius:19px; cursor:pointer;
+    border:none; text-align:center;
+    box-shadow:0 2px 10px rgba(0,0,0,0.5);
+  }
+
+  /* Torch button */
+  .torch-wrap{
+    position:relative; width:220px; height:220px;
+    display:flex; align-items:center; justify-content:center;
+    cursor:pointer;
+  }
+  .glow{
+    position:absolute; width:268px; height:268px; border-radius:50%;
+    background:var(--gold-bright); opacity:0; transition:opacity .2s ease;
+    filter: blur(2px);
+  }
+  .glow.on{ opacity:0.18; }
+  .torch-btn{
+    position:relative; width:220px; height:220px; border-radius:50%;
+    background:var(--black2);
+    border:1.8px solid var(--gold-dim);
+    display:flex; align-items:center; justify-content:center;
+    transition: background .12s ease, border-color .12s ease;
+  }
+  .torch-btn.on{
+    background:var(--gold-bright);
+    border-color:var(--gold-bright);
+  }
+  .torch-icon{ position:relative; width:60px; height:100px; }
+  .flash-body{
+    position:absolute; left:50%; top:34px; transform:translateX(-50%);
+    width:30px; height:48px; border-radius:6px; background:var(--gold-dim);
+  }
+  .flash-head{
+    position:absolute; left:50%; top:10px; transform:translateX(-50%);
+    width:46px; height:24px; border-radius:6px; background:var(--gold-dim);
+  }
+  .flash-lens{
+    position:absolute; left:50%; top:20px; transform:translateX(-50%);
+    width:22px; height:10px; border-radius:50%; background:var(--black2);
+  }
+  .torch-btn.on .flash-body,
+  .torch-btn.on .flash-head{ background:var(--black); }
+  .torch-btn.on .flash-lens{ background:var(--gold-dim); }
+  .rays{ position:absolute; top:-14px; left:0; width:100%; opacity:0; transition:opacity .1s;}
+  .torch-btn.on .rays{ opacity:1; }
+  .rays line{ stroke:var(--black); stroke-width:2.2; }
+
+  /* Status / trial labels */
+  .status-label{
+    position:absolute; bottom:120px; left:50%; transform:translateX(-50%);
+    color:var(--gold-dim); font-size:12px; letter-spacing:1px; font-weight:700;
+    transition:color .1s;
+  }
+  .status-label.on{ color:var(--gold-bright); }
+  .status-label.err{ color:var(--red); }
+  .trial-label{
+    position:absolute; bottom:88px; left:50%; transform:translateX(-50%);
+    color:var(--gold-dim); font-size:11px; text-align:center; width:280px;
+  }
+
+  /* Screen flash overlay - pure UI simulation, no hardware access */
+  #flash-overlay{
+    position:fixed; inset:0; background:#fff; opacity:0; pointer-events:none;
+    transition:opacity .05s linear; z-index:5;
+  }
+  #flash-overlay.on{ opacity:0.92; }
+
+  /* Modal overlay */
+  .modal-overlay{
+    position:fixed; inset:0; background:rgba(0,0,0,0.7);
+    display:none; align-items:center; justify-content:center; z-index:20;
+  }
+  .modal-overlay.show{ display:flex; }
+  .modal{
+    width:86%; max-width:360px; background:var(--black);
+    border:1px solid var(--gold-dim); border-radius:16px;
+    padding:20px; position:relative;
+  }
+  .modal h2{
+    color:var(--gold-bright); font-size:16px; margin:0 0 4px 0; font-weight:800;
+  }
+  .modal .sub{ color:var(--gold-dim); font-size:11px; margin:0 0 14px 0; }
+
+  .plan-card{
+    border:1px solid var(--gold-dim); border-radius:10px;
+    padding:10px 14px; margin-bottom:8px; cursor:pointer;
+    background:var(--black2);
+  }
+  .plan-card.selected{
+    background:#2b2408; border-color:var(--gold-bright);
+  }
+  .plan-card .p-title{ color:var(--gold-bright); font-size:14px; font-weight:700; }
+  .plan-card .p-price{ color:var(--gold-dim); font-size:11px; margin-top:2px; }
+
+  .buy-btn{
+    width:100%; margin-top:6px; padding:14px; border:none; border-radius:12px;
+    background:var(--gold-bright); color:var(--black); font-weight:800; font-size:14px;
+    cursor:pointer;
+  }
+  .close-x{
+    position:absolute; top:10px; right:12px; width:30px; height:30px; border-radius:50%;
+    border:1.4px solid var(--gold-dim); color:var(--gold-dim);
+    display:flex; align-items:center; justify-content:center; cursor:pointer; font-weight:700;
+  }
+
+  /* Ad popup */
+  .ad-modal{ text-align:center; padding-top:10px; }
+  .ad-modal .ad-title{ color:var(--gold-bright); font-weight:800; font-size:15px; }
+  .ad-countdown{ color:var(--gold-bright); font-size:42px; font-weight:800; margin:14px 0; }
+  .ad-sub{ color:var(--gold-dim); font-size:11px; }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <div class="brand">
+    <div class="logo">C</div>
+    <div class="text">
+      <div class="t1">CIPIL DEBUG</div>
+      <div class="t2">LEVEL XL</div>
+    </div>
+  </div>
+
+  <button class="pro-badge" id="proBadge">PRO'YA GEC</button>
+
+  <div class="torch-wrap" id="torchWrap">
+    <div class="glow" id="glow"></div>
+    <div class="torch-btn" id="torchBtn">
+      <div class="torch-icon">
+        <svg class="rays" viewBox="0 0 60 20"><g id="raysGroup">
+          <line x1="10" y1="18" x2="0" y2="0"></line>
+          <line x1="30" y1="18" x2="30" y2="-4"></line>
+          <line x1="50" y1="18" x2="60" y2="0"></line>
+        </g></svg>
+        <div class="flash-head"></div>
+        <div class="flash-lens"></div>
+        <div class="flash-body"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="status-label" id="statusLabel">KAPALI</div>
+  <div class="trial-label" id="trialLabel"></div>
+
+</div>
+
+<div id="flash-overlay"></div>
+
+<!-- Paywall Modal -->
+<div class="modal-overlay" id="paywallOverlay">
+  <div class="modal">
+    <h2>CIPIL DEBUG LEVEL XL PRO</h2>
+    <p class="sub">PRO sadece bu oturum icin gecerlidir</p>
+
+    <div class="plan-card" data-plan="daily">
+      <div class="p-title">Gunluk</div>
+      <div class="p-price">Ucretsiz - reklam izle</div>
+    </div>
+    <div class="plan-card" data-plan="monthly">
+      <div class="p-title">Aylik</div>
+      <div class="p-price">0,01 TL / ay</div>
+    </div>
+    <div class="plan-card selected" data-plan="yearly">
+      <div class="p-title">Yillik</div>
+      <div class="p-price">0,99 TL / yil - en avantajli</div>
+    </div>
+
+    <button class="buy-btn" id="buyBtn">SATIN AL</button>
+  </div>
+</div>
+
+<!-- Ad Modal -->
+<div class="modal-overlay" id="adOverlay">
+  <div class="modal ad-modal">
+    <div class="close-x" id="adCloseBtn">X</div>
+    <div class="ad-title">REKLAM OYNUYOR</div>
+    <div class="ad-countdown" id="adCountdown">5</div>
+    <div class="ad-sub">Odulunu almak icin bekle</div>
+  </div>
+</div>
+
+<script>
+(function(){
+  const AD_SECONDS = 5;
+  const DAY_MS = 24*60*60*1000;
+  const FLASH_HOLD_MS = 1000;
+  const FLASH_GAP_MS = 120;
+
+  // ---- Session-only state (RAM), mirrors original UsageStore behavior ----
+  let sessionTrials = 10;
+  let sessionPro = false;
+  let freeUntilEpoch = 0; // in-memory only, resets on reload like a fresh app launch
+  let selectedPlan = 'yearly';
+  let flashLocked = false;
+
+  const torchBtn = document.getElementById('torchBtn');
+  const torchWrap = document.getElementById('torchWrap');
+  const glow = document.getElementById('glow');
+  const statusLabel = document.getElementById('statusLabel');
+  const trialLabel = document.getElementById('trialLabel');
+  const proBadge = document.getElementById('proBadge');
+  const flashOverlay = document.getElementById('flash-overlay');
+
+  const paywallOverlay = document.getElementById('paywallOverlay');
+  const buyBtn = document.getElementById('buyBtn');
+  const planCards = document.querySelectorAll('.plan-card');
+
+  const adOverlay = document.getElementById('adOverlay');
+  const adCountdown = document.getElementById('adCountdown');
+  const adCloseBtn = document.getElementById('adCloseBtn');
+  let adInterval = null;
+
+  function hasFreeDay(){
+    return Date.now() < freeUntilEpoch;
+  }
+
+  function canUseNow(){
+    if (sessionPro || hasFreeDay()) return true;
+    return sessionTrials > 0;
+  }
+
+  function updateTrialLabel(){
+    if (sessionPro){
+      trialLabel.textContent = "PRO aktif - sinirsiz kullanim";
+    } else if (hasFreeDay()){
+      trialLabel.textContent = "Ucretsiz gun aktif - sinirsiz kullanim";
+    } else {
+      trialLabel.textContent = "Kalan deneme hakki: " + sessionTrials + "  -  Sınırsız için PRO'ya geç";
+    }
+  }
+
+  function setTorchVisual(on){
+    torchBtn.classList.toggle('on', on);
+    glow.classList.toggle('on', on);
+    statusLabel.textContent = on ? "ACIK" : "KAPALI";
+    statusLabel.classList.toggle('on', on);
+    statusLabel.classList.remove('err');
+    flashOverlay.classList.toggle('on', on);
+  }
+
+  function setStatusError(text){
+    statusLabel.textContent = text;
+    statusLabel.classList.remove('on');
+    statusLabel.classList.add('err');
+  }
+
+  function openPaywall(){
+    if (sessionPro) return;
+    paywallOverlay.classList.add('show');
+  }
+  function closePaywall(){
+    paywallOverlay.classList.remove('show');
+  }
+
+  function refreshBuyLabel(){
+    buyBtn.textContent = (selectedPlan === 'daily') ? "REKLAMI IZLE" : "SATIN AL";
+  }
+
+  planCards.forEach(card => {
+    card.addEventListener('click', () => {
+      selectedPlan = card.dataset.plan;
+      planCards.forEach(c => c.classList.toggle('selected', c === card));
+      refreshBuyLabel();
+    });
+  });
+
+  function setProBadgeUnlocked(){
+    proBadge.textContent = "PRO AKTIF";
+  }
+  function setProBadgeFreeDay(){
+    if (!sessionPro) proBadge.textContent = "UCRETSIZ GUN";
+  }
+  function resetProBadge(){
+    proBadge.textContent = "PRO'YA GEC";
+  }
+
+  buyBtn.addEventListener('click', () => {
+    if (selectedPlan === 'daily'){
+      closePaywall();
+      openAdPopup();
+    } else {
+      sessionPro = true;
+      setProBadgeUnlocked();
+      updateTrialLabel();
+      closePaywall();
+    }
+  });
+
+  proBadge.addEventListener('click', () => {
+    if (!sessionPro) openPaywall();
+  });
+
+  function openAdPopup(){
+    let secondsLeft = AD_SECONDS;
+    adCountdown.textContent = secondsLeft;
+    adOverlay.classList.add('show');
+    adInterval = setInterval(() => {
+      secondsLeft -= 1;
+      if (secondsLeft <= 0){
+        adCountdown.textContent = "0";
+        clearInterval(adInterval);
+        adOverlay.classList.remove('show');
+        grantFreeDayReward();
+      } else {
+        adCountdown.textContent = secondsLeft;
+      }
+    }, 1000);
+  }
+
+  adCloseBtn.addEventListener('click', () => {
+    clearInterval(adInterval);
+    adOverlay.classList.remove('show');
+  });
+
+  function grantFreeDayReward(){
+    freeUntilEpoch = Date.now() + DAY_MS;
+    setProBadgeFreeDay();
+    updateTrialLabel();
+  }
+
+  function startFlashSequence(){
+    if (flashLocked) return;
+
+    if (!canUseNow()){
+      setStatusError("DENEME HAKKI BITTI");
+      openPaywall();
+      return;
+    }
+
+    flashLocked = true;
+
+    // Trial hakkı sadece RAM'de düşürülür, hiçbir dosyaya yazılmaz
+    if (!sessionPro && !hasFreeDay()){
+      if (sessionTrials > 0) sessionTrials -= 1;
+    }
+    updateTrialLabel();
+
+    setTorchVisual(true);
+
+    setTimeout(() => {
+      setTorchVisual(false);
+      setTimeout(() => {
+        setTorchVisual(true);
+        setTimeout(() => {
+          setTorchVisual(false);
+          flashLocked = false;
+        }, FLASH_GAP_MS);
+      }, FLASH_GAP_MS);
+    }, FLASH_HOLD_MS);
+  }
+
+  torchWrap.addEventListener('click', startFlashSequence);
+
+  // Init
+  updateTrialLabel();
+  refreshBuyLabel();
+  setTimeout(openPaywall, 600);
+
+})();
+</script>
+</body>
+</html>
