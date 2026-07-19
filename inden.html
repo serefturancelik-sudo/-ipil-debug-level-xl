@@ -97,8 +97,9 @@
   /* Status / trial labels */
   .status-label{
     position:absolute; bottom:120px; left:50%; transform:translateX(-50%);
-    color:var(--gold-dim); font-size:12px; letter-spacing:1px; font-weight:700;
-    transition:color .1s;
+    color:var(--gold-dim); font-size:11px; letter-spacing:0.5px; font-weight:700;
+    transition:color .1s; width:90%; text-align:center; word-break:break-word;
+    line-height:1.4;
   }
   .status-label.on{ color:var(--gold-bright); }
   .status-label.err{ color:var(--red); }
@@ -242,6 +243,65 @@
   let selectedPlan = 'yearly';
   let flashLocked = false;
 
+  // ---- Real hardware torch access (getUserMedia + ImageCapture torch constraint) ----
+  let mediaStream = null;
+  let torchTrack = null;
+  let torchSupported = null; // null = henüz denenmedi, true/false = sonuç belli
+  let lastTorchError = "";
+
+  async function ensureTorchTrack(){
+    if (torchTrack) return true;
+
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+      torchSupported = false;
+      return false;
+    }
+
+    try {
+      mediaStream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: "environment" } },
+        audio: false
+      });
+    } catch (err){
+      torchSupported = false;
+      lastTorchError = "getUserMedia hatasi: " + err.name + " - " + err.message;
+      return false;
+    }
+
+    const track = mediaStream.getVideoTracks()[0];
+    if (!track){
+      torchSupported = false;
+      lastTorchError = "Video track bulunamadi";
+      return false;
+    }
+
+    const capabilities = track.getCapabilities ? track.getCapabilities() : {};
+    if (!capabilities.torch){
+      // Bu cihaz/tarayıcı torch constraint'i desteklemiyor
+      lastTorchError = "torch capability yok. Capabilities: " + JSON.stringify(capabilities);
+      track.stop();
+      mediaStream = null;
+      torchSupported = false;
+      return false;
+    }
+
+    torchTrack = track;
+    torchSupported = true;
+    return true;
+  }
+
+  async function setRealTorch(on){
+    const ready = await ensureTorchTrack();
+    if (!ready || !torchTrack) return false;
+    try {
+      await torchTrack.applyConstraints({ advanced: [{ torch: on }] });
+      return true;
+    } catch (err){
+      lastTorchError = "applyConstraints hatasi: " + err.name + " - " + err.message;
+      return false;
+    }
+  }
+
   const torchBtn = document.getElementById('torchBtn');
   const torchWrap = document.getElementById('torchWrap');
   const glow = document.getElementById('glow');
@@ -367,7 +427,9 @@
     updateTrialLabel();
   }
 
-  function startFlashSequence(){
+  function wait(ms){ return new Promise(res => setTimeout(res, ms)); }
+
+  async function startFlashSequence(){
     if (flashLocked) return;
 
     if (!canUseNow()){
@@ -378,27 +440,46 @@
 
     flashLocked = true;
 
+    const ready = await ensureTorchTrack();
+    if (!ready){
+      setStatusError(lastTorchError || "FENER BULUNAMADI / IZIN GEREKLI");
+      flashLocked = false;
+      return;
+    }
+
     // Trial hakkı sadece RAM'de düşürülür, hiçbir dosyaya yazılmaz
     if (!sessionPro && !hasFreeDay()){
       if (sessionTrials > 0) sessionTrials -= 1;
     }
     updateTrialLabel();
 
+    await setRealTorch(true);
     setTorchVisual(true);
+    await wait(FLASH_HOLD_MS);
 
-    setTimeout(() => {
-      setTorchVisual(false);
-      setTimeout(() => {
-        setTorchVisual(true);
-        setTimeout(() => {
-          setTorchVisual(false);
-          flashLocked = false;
-        }, FLASH_GAP_MS);
-      }, FLASH_GAP_MS);
-    }, FLASH_HOLD_MS);
+    await setRealTorch(false);
+    setTorchVisual(false);
+    await wait(FLASH_GAP_MS);
+
+    await setRealTorch(true);
+    setTorchVisual(true);
+    await wait(FLASH_GAP_MS);
+
+    await setRealTorch(false);
+    setTorchVisual(false);
+    flashLocked = false;
   }
 
   torchWrap.addEventListener('click', startFlashSequence);
+
+  window.addEventListener('beforeunload', () => {
+    if (torchTrack){
+      try { torchTrack.applyConstraints({ advanced: [{ torch: false }] }); } catch(e){}
+    }
+    if (mediaStream){
+      mediaStream.getTracks().forEach(t => t.stop());
+    }
+  });
 
   // Init
   updateTrialLabel();
